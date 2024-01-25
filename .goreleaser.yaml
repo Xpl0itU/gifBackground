@@ -28,7 +28,8 @@ archives:
     - goos: windows
       format: zip
     files:
-      - contornos.gif
+      - frames/black.png
+      - frames/white.png
     wrap_in_directory: true
 checksum:
   name_template: 'checksums.txt'

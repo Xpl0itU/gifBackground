@@ -1,3 +1,4 @@
 *.exe
-*.jpg
 *.html
+.DS_Store
+dist/

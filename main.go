@@ -1,7 +1,7 @@
 package main
 
 import (
-	"image/gif"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -9,12 +9,28 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/disintegration/imaging"
 	"github.com/reujab/wallpaper"
 )
 
 func setWallpaper(path string) error {
 	return wallpaper.SetFromFile(path)
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	return err
 }
 
 func main() {
@@ -25,46 +41,40 @@ func main() {
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGINT, syscall.SIGKILL, syscall.SIGQUIT, syscall.SIGHUP, os.Kill)
-	go func() {
-		<-c
-		err := setWallpaper(originalWallpaper)
-		if err != nil {
+
+	frameFolder := "frames"
+	imageFiles, err := filepath.Glob(filepath.Join(frameFolder, "*.png"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	tempFolder, err := os.MkdirTemp(os.TempDir(), "gifWallpaper")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, imagePath := range imageFiles {
+		if err := copyFile(imagePath, filepath.Join(tempFolder, filepath.Base(imagePath))); err != nil {
 			log.Fatal(err)
 		}
-		os.Exit(0)
-	}()
-
-	file, err := os.Open("contornos.gif")
-	if err != nil {
-		log.Fatal(err)
 	}
-	defer file.Close()
-
-	g, err := gif.DecodeAll(file)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	tmpPath, err := os.MkdirTemp(os.TempDir(), "gifBackground")
-	if err != nil {
-		log.Fatal(err)
-	}
-	tmpImgPath := filepath.Join(tmpPath, "temp.jpg")
 
 	for {
-		for _, frame := range g.Image {
-			img := imaging.Clone(frame)
-			err := imaging.Save(img, tmpImgPath)
-			if err != nil {
-				log.Fatal(err)
-			}
+		for _, imagePath := range imageFiles {
+			select {
+			case <-c:
+				err := setWallpaper(originalWallpaper)
+				if err != nil {
+					log.Fatal(err)
+				}
+				os.RemoveAll(tempFolder)
+				os.Exit(0)
+			default:
+				if err := setWallpaper(filepath.Join(tempFolder, filepath.Base(imagePath))); err != nil {
+					log.Fatal(err)
+				}
 
-			err = setWallpaper(tmpImgPath)
-			if err != nil {
-				log.Fatal(err)
+				time.Sleep(250 * time.Millisecond)
 			}
-
-			time.Sleep(250 * time.Millisecond)
 		}
 	}
 }
